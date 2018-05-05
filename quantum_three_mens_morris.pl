@@ -82,6 +82,8 @@
 
 % next_player/2
 % next_player(?Color1, ?Color2)
+next_player(white, black).
+next_player(black, white).
 
 
 % ----------------------------------------------------------------------
@@ -90,8 +92,27 @@
 % pentru atunci când Cell este o structură pos(X,Y) reprezentând o
 % celulă de pe tablă.
 
+pos(1, 1).
+pos(1, 2).
+pos(1, 3).
+pos(2, 1).
+pos(2, 2).
+pos(2, 3).
+pos(3, 1).
+pos(3, 2).
+pos(3, 3).
+
 % cell/1
 % cell(?Cell)
+cell(pos(1, 1)).
+cell(pos(1, 2)).
+cell(pos(1, 3)).
+cell(pos(2, 1)).
+cell(pos(2, 2)).
+cell(pos(2, 3)).
+cell(pos(3, 1)).
+cell(pos(3, 2)).
+cell(pos(3, 3)).
 
 
 % ----------------------------------------------------------------------
