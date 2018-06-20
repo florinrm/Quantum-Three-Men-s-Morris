@@ -82,8 +82,8 @@
 
 % next_player/2
 % next_player(?Color1, ?Color2)
-next_player(white, black).
 next_player(black, white).
+next_player(white, black).
 
 
 % ----------------------------------------------------------------------
@@ -92,27 +92,10 @@ next_player(black, white).
 % pentru atunci când Cell este o structură pos(X,Y) reprezentând o
 % celulă de pe tablă.
 
-pos(1, 1).
-pos(1, 2).
-pos(1, 3).
-pos(2, 1).
-pos(2, 2).
-pos(2, 3).
-pos(3, 1).
-pos(3, 2).
-pos(3, 3).
-
 % cell/1
 % cell(?Cell)
-cell(pos(1, 1)).
-cell(pos(1, 2)).
-cell(pos(1, 3)).
-cell(pos(2, 1)).
-cell(pos(2, 2)).
-cell(pos(2, 3)).
-cell(pos(3, 1)).
-cell(pos(3, 2)).
-cell(pos(3, 3)).
+pos(X, Y) :- member(X, [1, 2, 3]), member(Y, [1, 2, 3]).
+cell(pos(X, Y)) :- pos(X, Y).
 
 
 % ----------------------------------------------------------------------
@@ -128,6 +111,18 @@ cell(pos(3, 3)).
 
 % valid_pairs/3
 % valid_pairs(+State, +Color, -Pairs)
+removeDuplicates([], List, Result) :- Result = List. 
+removeDuplicates([(Pair1, Pair2) | Tail], List, Result) :- ((\+member((Pair2, Pair1), List)) -> removeDuplicates(Tail, [(Pair1, Pair2) | List], Result); 
+                                                            removeDuplicates(Tail, List, Result)).
+findAllPairs(Table) :- findall((Pair1, Pair2), (cell(Pair1), cell(Pair2), Pair1 \= Pair2), Result), removeDuplicates(Result, [], Table).
+checkPair(P, (P1, P2)) :- P == P1; P == P2.
+checkPair(Color, P1, P2, C, (Pair1, Pair2)) :- (P1, P2, C) == (Pair1, Pair2, Color).
+checkValidPairs([], Pairs, _, PairsOut) :- PairsOut = Pairs.
+checkValidPairs([Head | Tail], Pairs, Color, Result) :-
+    ((Head = classic(P, _), exclude(checkPair(P), Pairs, Smth));
+    (Head = quantum(P1, P2, C), exclude(checkPair(Color, P1, P2, C), Pairs, Smth))), !,
+    checkValidPairs(Tail, Smth, Color, Thing), Result = Thing.
+valid_pairs(State, Color, Pairs) :- findAllPairs(Table), checkValidPairs(State, Table, Color, Pairs).
 
 
 
@@ -137,9 +132,10 @@ cell(pos(3, 3)).
 % care leagă variabila Moves la lista tuturor mutărilor pe care le
 % poate face jucătorul Color. O mutare poate fi de două feluri:
 %
-%  move(classic((1,2), white), quantum((1,3), (2,1), white))
+%  move(classic(pos(1,2), white), quantum(pos(1,3), pos(2,1), white))
 %     sau
-%  move(quantum((3,3), (1,1), white), quantum((1,3), (2,1), white))
+%  move(quantum(pos(3,3), pos(1,1), white),
+%       quantum(pos(1,3), pos(2,1), white))
 
 
 % valid_moves/3
@@ -229,7 +225,7 @@ rand_move(_State, _Color, _Step, ValidMoves, Move):-
 % ----------------------------------------------------------------------
 
 % [Cerința 8] Definiți strategiile pentru un jucător care să câștige în
-% medie mai mult de 50% dintre jocur împotriva jucătorul random.
+% medie mai mult de 80% dintre jocur împotriva jucătorul random.
 
 
 smart_place(State, Color, Step, ValidPairs, Pair):-
@@ -259,26 +255,61 @@ bonus_move(State, Color, Step, ValidMoves, Move):-
 % ----------------------------------------------------------------------
 % ----------------------------------------------------------------------
 
+% verbose.  %% Comentați linia aceasta pentru a vedea evoluția jocurilor.
+verbose:- fail.
 
 play(Player1, Player2, State, Color, Step, LastPiece, Winner):-
     Player1 = (PPlace, PMeasure, PMove),
-    ( has_cycle(State), !,
-      call(PMeasure, State, Color, Step, LastPiece, Cell),
-      collapse(State, LastPiece, Cell, NoCycle), !
-    ; NoCycle = State ),
+    ( verbose -> format('-------------------- Pas [~w]~n', [Step]),
+      format('Apel has_cycle(~w)...~n', [State]); true ),
+    ( has_cycle(State) ->
+      ( verbose -> format('Apel ~w(~w, ~w, ~w, ~w, Cell)...~n',
+	       [PMeasure, State, Color, Step, LastPiece]) ; true ),
+      ( call(PMeasure, State, Color, Step, LastPiece, Cell) ->
+	( verbose -> format('Apel collapse(~w, ~w, ~w, NoCycle)...~n',
+		 [State, LastPiece, Cell]); true ),
+        ( collapse(State, LastPiece, Cell, NoCycle) ->
+	  true
+	; format('collapse(~w, ~w, ~w, NoCycle) a eșuat.~n',
+		 [State, LastPiece, Cell]),
+	  !, fail)
+      ; format('~w(~w, ~w, ~w, ~w, Cell) a eșuat.~n',
+	       [PMeasure, State, Color, Step, LastPiece]),
+	!, fail)
+    ; NoCycle = State),
     ( winner(NoCycle, Winner), !
-    ; Step =:= 50, !, Winner = [white, black]
-    ; ( length(NoCycle, 6), !, valid_moves(NoCycle, Color, ValidMoves),
-	call(PMove, NoCycle, Color, Step, ValidMoves, Move),
-	Move = move(OldPiece, NewPiece),
-	select(OldPiece, NoCycle, NewPiece, NextState), !
-      ; valid_pairs(NoCycle, Color, ValidPairs),
-	call(PPlace, NoCycle, Color, Step, ValidPairs, (Cell1, Cell2)),
-	NewPiece = quantum(Cell1, Cell2, Color),
-	NextState = [NewPiece | NoCycle], !),
+    ; Step =:= 50, !, Winner = [white, black],
+      (   verbose -> format('Am ajuns la pasul 50.~n'); true )
+    ; ( length(NoCycle, 6) ->
+	( verbose -> format('Apel valid_moves(~w, ~w, ValidMoves).~n',
+		 [NoCycle, Color]); true ),
+        ( valid_moves(NoCycle, Color, ValidMoves)->
+	  ( verbose -> format('Apel ~w(~w, ~w, ~w, ~w, Move)...~n',
+		   [PMove, NoCycle, Color, Step, ValidMoves]); true ),
+          ( call(PMove, NoCycle, Color, Step, ValidMoves, Move) ->
+	    Move = move(OldPiece, NewPiece),
+	    select(OldPiece, NoCycle, NewPiece, NextState), !
+	  ; format('~w(~w, ~w, ~w, ~w, Move) a eșuat.~n',
+		   [PMove, NoCycle, Color, Step, ValidMoves]),
+	    !, fail)
+	; format('valid_moves(~w, ~w, ValidMoves) a eșuat.~n',
+		 [NoCycle, Color]),
+	  !, fail)
+      ; (verbose -> format('Apel valid_pairs(~w, ~w, ValidPairs)...~n',
+                               [NoCycle, Color]); true),
+        ( valid_pairs(NoCycle, Color, ValidPairs) ->
+          ( verbose -> format('Apel ~w(~w, ~w, ~w, ~w, (Cell1, Cell2)).~n',
+		   [PPlace, NoCycle, Color, Step, ValidPairs]); true),
+	  ( call(PPlace, NoCycle, Color, Step, ValidPairs, (Cell1, Cell2)) ->
+	    NewPiece = quantum(Cell1, Cell2, Color),
+	    NextState = [NewPiece | NoCycle], !
+	  ; format('~w(~w, ~w, ~w, ~w, (Cell1, Cell2)) a eșuat.~n',
+		   [PPlace, NoCycle, Color, Step]),
+	    !, fail)
+	; format('valid_pairs(~w, ~w, ValidPairs) a eșuat.~n', [NoCycle, Color]),
+	  !, fail) ),
       next_player(Color, NextColor), Step1 is Step + 1, !,
-      play(Player2, Player1, NextState, NextColor, Step1, NewPiece, Winner)
-    ).
+      play(Player2, Player1, NextState, NextColor, Step1, NewPiece, Winner) ).
 
 
 play_against_random(Strategy, Winner):-
@@ -301,4 +332,8 @@ score_against_random(Strategy, N1, B1, D1, W1, B, D, W):-
     (Winner = [white] -> W2 is W1 + 1 ; W2 = W1),
     (Winner = [_, _] -> D2 is D1 + 1 ; D2 = D1),
     N2 is N1 - 1,
+    ( verbose ->
+      format('>>>>>>>>>>> Mai sunt de jucat ~w jocuri. Strategia a câștigat ~w jocuri, Random ~w jocuri, ~w remize. ~n',
+	     [N2, B2, W2, D2])
+    ; true ),
     score_against_random(Strategy, N2, B2, D2, W2, B, D, W).
