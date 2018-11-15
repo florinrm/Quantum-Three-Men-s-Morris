@@ -141,6 +141,29 @@ valid_pairs(State, Color, Pairs) :- findAllPairs(Table), checkValidPairs(State, 
 % valid_moves/3
 % valid_moves(+State, +Color, -Moves)
 
+valid_pair(State, Color, (X, Y)) :- cell(X), cell(Y), X @< Y,
+	not(member(classic(X, _), State)), not(member(classic(Y, _), State)),
+	not(member(quantum(X, Y, Color), State)).
+
+valid_move(State, Color, move(X, quantum(POS1,POS2,Color))) :-
+	valid_pair(State, Color, (POS1, POS2)),
+	member(X, State),
+	X = quantum(P1, P2, Color),
+	POS1 \= P1,
+	POS2 \= P2,
+	POS1 \= P2,
+	POS2 \= P1.
+
+valid_move(State, Color, move(X, quantum(POS1,POS2,Color))) :-
+	valid_pair(State,Color,(POS1, POS2)),
+	member(X,State),
+	X = classic(P1,Color),
+	POS1 \= P1,
+	POS2 \= P1.
+
+valid_moves(State, Color, Moves) :- findall(X, valid_move(State, Color, X), Moves).
+
+
 
 % ----------------------------------------------------------------------
 
@@ -152,7 +175,18 @@ valid_pairs(State, Color, Pairs) :- findAllPairs(Table), checkValidPairs(State, 
 
 % winner/2
 % winner(+State, -Colors)
-
+win_aux(State, Color):-
+    (member(classic(pos(X, 1), Color), State), member(classic(pos(X,2), Color), State), 
+        member(classic(pos(X,3), Color), State), member(X, [1, 2, 3]));
+        (member(classic(pos(1,Y), Color), State), member(classic(pos(2,Y), Color), State), 
+        member(classic(pos(3,Y), Color), State), member(Y, [1, 2, 3]));
+        member(classic(pos(1, 1), Color), State), member(classic(pos(2, 2), Color), State), 
+        member(classic(pos(3, 3), Color), State);
+        member(classic(pos(1,3), Color), State), member(classic(pos(2,2), Color), State), 
+        member(classic(pos(3,1), Color), State).
+    
+winner(_, []) :- fail.
+winner(State, Winner) :- findall(X, win_aux(State, X), Aux), Aux \= [], Winner = Aux.
 
 
 % ----------------------------------------------------------------------
@@ -173,6 +207,14 @@ valid_pairs(State, Color, Pairs) :- findAllPairs(Table), checkValidPairs(State, 
 % has_cycle/1
 % has_cycle(+State)
 
+edge(State, Current, Next) :- member(quantum(Current, Next, _), State); member(quantum(Next, Current, _), State).
+
+has_cycle(_, Curr, Visited) :- member(Curr, Visited), !. 
+has_cycle(State, Current, Visited) :- edge(State, Current , Next), has_cycle(State, Next, [Current | Visited]) .
+
+has_cycle(State) :- has_cycle(State, pos(1, 1), []).
+
+
 
 % ----------------------------------------------------------------------
 
@@ -183,6 +225,25 @@ valid_pairs(State, Color, Pairs) :- findAllPairs(Table), checkValidPairs(State, 
 
 % collapse/4
 % collapse(+State, +Piece, +Cell, -NewState)
+
+nextPiece(State, [], _, NewState) :- NewState = State.
+nextPiece(State, [quantum(P1, Cell, Color) | T], Cell, NewState) :-
+    collapse(State, quantum(P1, Cell, Color), P1, NewState2),
+    nextPiece(NewState2, T, Cell, NewState).
+
+nextPiece(State, [quantum(Cell, P1, Color) | T], Cell, NewState) :-
+    collapse(State, quantum(Cell, P1, Color), P1, NewState2),
+    nextPiece(NewState2, T, Cell, NewState).
+
+
+creeazaQuantica(quantum(_, _, Color), Cell, Piece) :- Piece = classic(Cell, Color).
+
+collapse(State, Piece, Cell, NewState) :-
+    creeazaQuantica(Piece, Cell, Classica),
+    delete(State, Piece, StateFaraPiece),
+    append(StateFaraPiece, [Classica], StateCuClassic),
+    findall(K, (K = quantum(P1, P2, _), member(K, StateCuClassic), (P1 == Cell; P2 == Cell)), Lista),
+    nextPiece(StateCuClassic, Lista, Cell, NewState).
 
 
 % ----------------------------------------------------------------------
